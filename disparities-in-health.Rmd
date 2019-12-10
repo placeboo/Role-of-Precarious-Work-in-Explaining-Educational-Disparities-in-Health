@@ -1,0 +1,222 @@
+---
+title: "Data Exploration: Role of Precarious Work in Explaining Educational Disparities in Health"
+author: "Jiaq Yin"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output: 
+  bookdown::html_document2:
+    css: style.css
+    toc: true
+    toc_float: true
+    number_sections: true
+    fig_width: 6
+    fig_height: 4
+    fig_caption: true
+    df_print: paged
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache = TRUE, message=FALSE, warning=FALSE, autodep=TRUE,fig.path = 'figures/', fig.pos='center', fig.cap = "")
+rm(list = ls())
+```
+
+```{r library}
+library(tidyverse)
+library(kableExtra)
+library(data.table)
+library(DT)
+```
+
+```{r ggplot-setting}
+theme_set(theme_bw() + 
+            theme(axis.text.x = element_text(color = "grey20", size = 11, face = "plain"),
+                  axis.text.y = element_text(color = "grey20", size = 11, face = "plain"),
+                  axis.title.x = element_text(color = "grey20", size =13, face = "bold"),
+                  axis.title.y = element_text(color = "grey20", size = 13, face = "bold"),
+                  legend.text = element_text(size = 11),
+                  legend.title = element_text(size = 13, face = "bold"),
+                  strip.text.x = element_text(size=11, face="bold")))
+```
+
+
+```{r loadData}
+data = read.csv("~/UW/RA2019-2020/data/R_data.csv", stringsAsFactors=FALSE)
+```
+
+```{r dataChange}
+data = data %>%
+        mutate(srh_num = recode(srh, "Excellent" = 5,
+                                "Very good" = 4,
+                                "Good" = 3,
+                                "Fair" = 2,
+                                "Poor" = 1))
+```
+
+#  Data Overview
+
+From 1984 to 2017, there are 32,208 participants, and 291,937 measures in total. 
+
+```{r visit-number-table}
+ data %>%
+  group_by(unique_id) %>%
+  summarise(n_visit = n()) %>% 
+  group_by(n_visit) %>%
+  summarise(n = n()) %>%
+  arrange(desc(n_visit)) %>%
+  kable() %>%
+  kable_styling(bootstrap_options = "striped", full_width = FALSE, position = "left")
+```
+
+```{r fig-num-visit, fig.cap="The number of visits."}
+data %>%
+  group_by(unique_id) %>%
+  summarise(n_visit = n()) %>% 
+  group_by(n_visit) %>%
+  summarise(n = n()) %>%
+  arrange(desc(n_visit)) %>%
+  ggplot(aes(n_visit, n)) + 
+  geom_bar(stat="identity", fill = "red", alpha = 0.8) + 
+  xlab("Visits") + ylab("Number")
+```
+
+```{r, fig.cap="The number of visits varying with year."}
+data %>%
+  group_by(year) %>%
+  summarise(n_visit = n()) %>%
+  ggplot(aes(x = year, y = n_visit)) +
+  geom_point(alpha = 0.6, color = "red", size = 2) + 
+  geom_line(alpha = 0.6,  color = "red") + 
+  scale_x_continuous(breaks = seq(1984, 2017, by = 2)) + 
+  scale_y_continuous(breaks = seq(10000, 15000, by = 500)) + 
+  theme(axis.text.x = element_text(angle = 30, hjust = 1, size = 12)) 
+```
+
+```{r fig-years-follow-up, fig.cap="The distribution of years of follow-ups "}
+data.baseline = data %>%
+  group_by(unique_id) %>%
+  arrange(year, .by_group = TRUE) %>%
+  slice(1)
+
+data.last = data %>%
+  group_by(unique_id) %>%
+  arrange(desc(year), .by_group = TRUE) %>%
+  slice(1)
+
+year_diff = data.last$year - data.baseline$year
+
+year_diff %>%
+  as.data.frame() %>%
+  ggplot(aes(year_diff)) +
+  geom_histogram(fill = "red") + 
+  scale_x_continuous(breaks = seq(0, 35, 2)) + 
+  xlab("Years of follow-up")
+```
+
+We randomly pick 2 people who have 24 visits, 2 people who have 18 visits, 2 people who have 12 visits, 2 people who have 6 visits.
+
+```{r sample-visit-plot, fig.cap="Random samples."}
+visit.dat = data %>%
+        group_by(unique_id) %>%
+        summarise(n_visit = n()) %>% 
+        group_by(n_visit) 
+
+visit24 = visit.dat %>%
+        filter(n_visit == 24) 
+visit18 = visit.dat %>%
+        filter(n_visit == 18) 
+visit12 = visit.dat %>%
+        filter(n_visit == 12)
+visit6 = visit.dat %>%
+        filter(n_visit == 6)
+
+id_sample = c(pull(visit24[sample(1:nrow(visit24), 4), ], unique_id), 
+              pull(visit18[sample(1:nrow(visit18), 4), 1], unique_id),
+              pull(visit12[sample(1:nrow(visit12), 4), 1], unique_id),
+              pull(visit6[sample(1:nrow(visit6), 4), 1], unique_id)) 
+
+sample_dat = NULL
+for (id in id_sample) {
+        tmp_dat = data %>%
+                filter(unique_id == id)
+        sample_dat = rbind(sample_dat, tmp_dat)
+}
+
+sample_dat = sample_dat %>%
+        mutate(n_visit = c(rep(24, 24 * 4), 
+                           rep(18, 18 * 4),
+                           rep(12, 12 * 4),
+                           rep(6, 6 * 4)))
+
+sample_dat %>%
+        mutate(unique_id = as.factor(unique_id)) %>%
+        ggplot(aes(x = year, y = srh_num, color = unique_id)) +
+        geom_point(size = 2, alpha = 0.6) + 
+        geom_line(size = 1, alpha = 0.6) + 
+        facet_grid(. ~ n_visit) + 
+        theme(legend.position = "none",
+              axis.text.x = element_text(angle = 30, hjust = 1, size = 10)) + 
+        scale_x_continuous(breaks = seq(1984, 2017, by = 5))
+```
+
+# Baseline
+
+We pull out the information of the first visit.
+```{r baseline-year, fig.cap="The number of the first visit with respect to the year"}
+data.baseline %>%
+  group_by(year) %>%
+  summarise(n = n()) %>%
+  ggplot(aes(x = year, y = n)) +
+  geom_point(alpha = 0.6, color = "red", size = 2) + 
+  geom_line(alpha = 0.6,  color = "red") + 
+  scale_x_continuous(breaks = seq(1984, 2017, by = 2)) + 
+  theme(axis.text.x = element_text(angle = 30, hjust = 1, size = 12)) +
+  ylab("Number of First Visits") + xlab("Year")
+```
+
+```{r baseline-age, fig.cap = "The distribution of baseline age."}
+data.baseline %>%
+  group_by(age) %>%
+  summarise(n = n()) %>%
+  ggplot(aes(x = age, y = n)) +
+  geom_bar(stat="identity", fill = "red", alpha = 0.8) + 
+  xlab("Age") + ylab("Number") + 
+  scale_x_continuous(breaks = seq(10, 100, by = 5)) + 
+  scale_y_continuous(breaks = seq(0, 2000, by = 200))
+```
+
+```{r gender-table}
+data.baseline %>%
+  group_by(gender) %>%
+  summarise(n = n()) %>%
+  mutate(prop = n / sum(n)) %>%
+  kable(caption = "Baseline gender distribution") %>%
+  kable_styling(bootstrap_options = "striped", full_width = FALSE, position = "left")
+```
+
+
+```{r education-table}
+data.baseline %>%
+  group_by(education) %>%
+  summarise(n = n()) %>%
+  mutate(prop = n / sum(n)) %>%
+  kable(caption = "Baseline education distribution") %>%
+  kable_styling(bootstrap_options = "striped", full_width = FALSE, position = "left")
+```
+
+```{r race-table}
+data.baseline %>%
+  group_by(race) %>%
+  summarise(n = n()) %>%
+  mutate(prop = n / sum(n)) %>%
+  kable(caption = "Baseline race distribution") %>%
+  kable_styling(bootstrap_options = "striped", full_width = FALSE, position = "left")
+```
+
+```{r nativity-table}
+data.baseline %>%
+  group_by(nativity) %>%
+  summarise(n = n()) %>%
+  mutate(prop = n / sum(n)) %>%
+  kable(caption = "Baseline nativity distribution") %>%
+  kable_styling(bootstrap_options = "striped", full_width = FALSE, position = "left")
+```
