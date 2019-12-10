@@ -45,7 +45,8 @@ data = read.csv("~/UW/RA2019-2020/data/R_data.csv", stringsAsFactors=FALSE)
 
 ```{r dataChange}
 data = data %>%
-        mutate(srh_num = recode(srh, "Excellent" = 5,
+        mutate(srh_num = recode(srh, 
+                                "Excellent" = 5,
                                 "Very good" = 4,
                                 "Good" = 3,
                                 "Fair" = 2,
